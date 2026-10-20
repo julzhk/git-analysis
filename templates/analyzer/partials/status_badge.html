@@ -1,0 +1,4 @@
+{% if analysis.status == "done" %}<span class="shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">Done</span>
+{% elif analysis.status == "failed" %}<span class="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">Failed</span>
+{% elif analysis.status == "running" %}<span class="shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">Running</span>
+{% else %}<span class="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">Queued</span>{% endif %}

@@ -1,0 +1,85 @@
+<div class="space-y-6">
+    <dl class="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        {% with card="rounded-lg bg-white p-4 shadow" %}
+        <div class="{{ card }}"><dt class="text-xs font-medium uppercase text-gray-500">Python files</dt><dd class="mt-1 text-2xl font-semibold text-gray-900">{{ kpis.files }}</dd></div>
+        <div class="{{ card }}"><dt class="text-xs font-medium uppercase text-gray-500">Commits</dt><dd class="mt-1 text-2xl font-semibold text-gray-900">{{ kpis.commits }}</dd></div>
+        <div class="{{ card }}"><dt class="text-xs font-medium uppercase text-gray-500">Lines of code</dt><dd class="mt-1 text-2xl font-semibold text-gray-900">{{ kpis.loc }}</dd></div>
+        <div class="{{ card }}"><dt class="text-xs font-medium uppercase text-gray-500">Mean avg CC</dt><dd class="mt-1 text-2xl font-semibold text-gray-900">{{ kpis.mean_cc|floatformat:2|default:"—" }}</dd></div>
+        <div class="{{ card }}"><dt class="text-xs font-medium uppercase text-gray-500">Maintainable (MI ≥ 65)</dt><dd class="mt-1 text-2xl font-semibold text-gray-900">{% if kpis.maintainable_pct is not None %}{{ kpis.maintainable_pct|floatformat:0 }}%{% else %}—{% endif %}</dd></div>
+        <div class="{{ card }}"><dt class="text-xs font-medium uppercase text-gray-500">Rank D–F files</dt><dd class="mt-1 text-2xl font-semibold {% if kpis.complex_files %}text-red-600{% else %}text-gray-900{% endif %}">{{ kpis.complex_files }}</dd></div>
+        {% endwith %}
+    </dl>
+
+    {% if not results.files %}
+    <div class="rounded-lg bg-white p-6 shadow text-gray-600">No Python files were found on this branch (after exclusions).</div>
+    {% else %}
+    <section class="rounded-lg bg-white p-4 shadow">
+        <h2 class="font-semibold text-gray-900">Complexity vs rate of change</h2>
+        <p class="text-sm text-gray-500">Bubble size = lines of code. Files labelled in the top-right are complex <em>and</em> frequently changed — the riskiest.</p>
+        <img src="{% url 'chart' analysis.pk 'bubble' %}" alt="Bubble chart of complexity against change rate" class="mt-3 w-full" loading="lazy">
+    </section>
+
+    <div class="grid gap-6 lg:grid-cols-2">
+        <section class="rounded-lg bg-white p-4 shadow">
+            <h2 class="font-semibold text-gray-900">Top 20 files — avg cyclomatic complexity</h2>
+            <img src="{% url 'chart' analysis.pk 'top_cc' %}" alt="Top 20 files by average complexity" class="mt-3 w-full" loading="lazy">
+        </section>
+        <section class="rounded-lg bg-white p-4 shadow">
+            <h2 class="font-semibold text-gray-900">Top 20 files — commits per month</h2>
+            <img src="{% url 'chart' analysis.pk 'top_change_rate' %}" alt="Top 20 files by change rate" class="mt-3 w-full" loading="lazy">
+        </section>
+        <section class="rounded-lg bg-white p-4 shadow">
+            <h2 class="font-semibold text-gray-900">Maintainability index distribution</h2>
+            <p class="text-sm text-gray-500">Higher is better.</p>
+            <img src="{% url 'chart' analysis.pk 'mi_hist' %}" alt="Histogram of maintainability index" class="mt-3 w-full" loading="lazy">
+        </section>
+        <section class="rounded-lg bg-white p-4 shadow">
+            <h2 class="font-semibold text-gray-900">CC rank distribution</h2>
+            <p class="text-sm text-gray-500">Rank of each file's most complex function.</p>
+            <img src="{% url 'chart' analysis.pk 'rank_donut' %}" alt="Donut chart of complexity ranks" class="mt-3 w-full" loading="lazy">
+        </section>
+    </div>
+
+    <section class="rounded-lg bg-white p-4 shadow">
+        <h2 class="font-semibold text-gray-900">Churn vs lines of code</h2>
+        <p class="text-sm text-gray-500">Total lines added + deleted over the file's history, coloured by CC rank.</p>
+        <img src="{% url 'chart' analysis.pk 'churn_loc' %}" alt="Scatter of churn against lines of code" class="mt-3 w-full" loading="lazy">
+    </section>
+
+    <section class="rounded-lg bg-white shadow overflow-hidden">
+        <h2 class="px-4 pt-4 font-semibold text-gray-900">Summary statistics</h2>
+        <div class="overflow-x-auto">
+            <table class="mt-3 min-w-full text-sm">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                        <th class="px-4 py-2 text-left">Metric</th>
+                        <th class="px-4 py-2 text-right">count</th>
+                        <th class="px-4 py-2 text-right">mean</th>
+                        <th class="px-4 py-2 text-right">std</th>
+                        <th class="px-4 py-2 text-right">min</th>
+                        <th class="px-4 py-2 text-right">25%</th>
+                        <th class="px-4 py-2 text-right">50%</th>
+                        <th class="px-4 py-2 text-right">75%</th>
+                        <th class="px-4 py-2 text-right">max</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 tabular-nums">
+                    {% for row in summary %}
+                    <tr>
+                        <td class="px-4 py-2 font-mono text-gray-900">{{ row.column }}</td>
+                        <td class="px-4 py-2 text-right">{{ row.count }}</td>
+                        <td class="px-4 py-2 text-right">{{ row.mean|floatformat:2 }}</td>
+                        <td class="px-4 py-2 text-right">{{ row.std|floatformat:2 }}</td>
+                        <td class="px-4 py-2 text-right">{{ row.min|floatformat:-2 }}</td>
+                        <td class="px-4 py-2 text-right">{{ row.q1|floatformat:-2 }}</td>
+                        <td class="px-4 py-2 text-right">{{ row.median|floatformat:-2 }}</td>
+                        <td class="px-4 py-2 text-right">{{ row.q3|floatformat:-2 }}</td>
+                        <td class="px-4 py-2 text-right">{{ row.max|floatformat:-2 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+</div>

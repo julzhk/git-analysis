@@ -1,0 +1,28 @@
+{% load analyzer_tags %}
+{% wizard_steps 1 %}
+<form hx-post="{% url 'inspect_repo' %}" hx-target="#wizard" hx-indicator="#inspect-spinner"
+      hx-disabled-elt="find button" class="px-4 py-6 sm:px-6 space-y-4">
+    <div>
+        <label for="id_repo_url" class="block text-sm font-medium text-gray-700">Repository URL</label>
+        <input type="text" name="repo_url" id="id_repo_url" required autofocus
+               value="{{ form.repo_url.value|default:'' }}"
+               placeholder="https://github.com/org/repo.git"
+               class="mt-1 block w-full rounded-md border px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 {% if form.repo_url.errors %}border-red-400{% else %}border-gray-300{% endif %}">
+        {% for error in form.repo_url.errors %}
+            <p class="mt-2 text-sm text-red-600">{{ error }}</p>
+        {% endfor %}
+        <p class="mt-2 text-xs text-gray-500">
+            Public repos work as-is. For a private repo, embed a token: <code class="font-mono">https://&lt;TOKEN&gt;@github.com/org/repo.git</code>.
+            Only Python files are analysed.
+        </p>
+    </div>
+    <div class="flex items-center justify-end gap-3">
+        <span id="inspect-spinner" class="htmx-indicator flex items-center gap-2 text-sm text-gray-500">
+            {% include "analyzer/partials/spinner.html" %} Contacting repository…
+        </span>
+        <button type="submit"
+                class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50">
+            Next: choose branch →
+        </button>
+    </div>
+</form>

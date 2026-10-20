@@ -1,0 +1,18 @@
+[project]
+name = "git-analyis"
+version = "0.1.0"
+description = "Web tool to analyse code quality and change history of a git repository"
+requires-python = ">=3.13"
+dependencies = [
+    "django>=6.0.3",
+    "django-htmx>=1.27.0",
+    "django-tailwind-cli>=4.5.1",
+    "matplotlib>=3.10.8",
+    "numpy>=2.4.3",
+    "radon>=6.0.1",
+    # notebook only
+    "gitpython>=3.1.46",
+    "ipykernel>=7.2.0",
+    "pandas>=3.0.1",
+    "polars>=1.39.0",
+]

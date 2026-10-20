@@ -1,0 +1,53 @@
+{% load analyzer_tags %}
+<div class="fixed inset-0 z-40 bg-gray-900/30" hx-on:click="document.getElementById('file-panel').innerHTML = ''"></div>
+<aside class="fixed inset-y-0 right-0 z-50 w-full max-w-lg overflow-y-auto bg-white shadow-xl" role="dialog" aria-label="File details">
+    <div class="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4">
+        <div class="min-w-0">
+            <h2 class="truncate font-mono font-semibold text-gray-900">{{ file.file|basename }}</h2>
+            <p class="break-all font-mono text-xs text-gray-500">{{ file.file }}</p>
+        </div>
+        <button class="text-gray-400 hover:text-gray-700" aria-label="Close"
+                hx-on:click="document.getElementById('file-panel').innerHTML = ''">
+            <svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z"/></svg>
+        </button>
+    </div>
+
+    <dl class="grid grid-cols-3 gap-px bg-gray-200 text-sm">
+        {% with cell="bg-white px-4 py-3" label="text-xs uppercase text-gray-500" value="mt-0.5 font-semibold text-gray-900 tabular-nums" %}
+        <div class="{{ cell }}"><dt class="{{ label }}">Risk score</dt><dd class="{{ value }}">{{ file.risk_score|floatformat:2|default:"—" }}</dd></div>
+        <div class="{{ cell }}"><dt class="{{ label }}">CC rank</dt><dd class="{{ value }}"><span class="rounded px-1.5 py-0.5 {{ file.cc_rank|rank_classes }}">{{ file.cc_rank|default:"?" }}</span></dd></div>
+        <div class="{{ cell }}"><dt class="{{ label }}">Maintainability</dt><dd class="{{ value }} {{ file.mi|mi_classes }}">{{ file.mi|floatformat:1|default:"—" }}</dd></div>
+        <div class="{{ cell }}"><dt class="{{ label }}">Avg CC</dt><dd class="{{ value }}">{{ file.avg_cc|floatformat:2|default:"—" }}</dd></div>
+        <div class="{{ cell }}"><dt class="{{ label }}">Max CC</dt><dd class="{{ value }}">{{ file.max_cc|default:"—" }}</dd></div>
+        <div class="{{ cell }}"><dt class="{{ label }}">LOC</dt><dd class="{{ value }}">{{ file.loc }}</dd></div>
+        <div class="{{ cell }}"><dt class="{{ label }}">Commits</dt><dd class="{{ value }}">{{ file.n_commits }}</dd></div>
+        <div class="{{ cell }}"><dt class="{{ label }}">Churn</dt><dd class="{{ value }}">{{ file.churn }}</dd></div>
+        <div class="{{ cell }}"><dt class="{{ label }}">Commits / month</dt><dd class="{{ value }}">{{ file.change_rate|floatformat:2 }}</dd></div>
+        {% endwith %}
+    </dl>
+    <p class="px-5 py-3 text-xs text-gray-500">
+        {% if file.first_seen %}First changed {{ file.first_seen|slice:":10" }}, last changed {{ file.last_seen|slice:":10" }}{% if file.age_days %} ({{ file.age_days }} days){% endif %}.{% else %}Not found in git history (untracked or excluded path in history).{% endif %}
+    </p>
+
+    <div class="border-t border-gray-200 px-5 py-4">
+        <h3 class="font-semibold text-gray-900">Changes together with</h3>
+        <p class="text-xs text-gray-500">Files most often committed alongside this one ({{ file.coupling_degree }} partner{{ file.coupling_degree|pluralize }} in total).</p>
+        {% if partners %}
+        <ul class="mt-3 divide-y divide-gray-100">
+            {% for p in partners %}
+            <li class="flex items-center justify-between gap-3 py-2">
+                {% if p.exists %}
+                <button class="min-w-0 truncate text-left font-mono text-xs text-indigo-700 hover:underline" title="{{ p.other }}"
+                        hx-get="{% url 'file_detail' analysis.pk %}?path={{ p.other|urlencode }}" hx-target="#file-panel">{{ p.other }}</button>
+                {% else %}
+                <span class="min-w-0 truncate font-mono text-xs text-gray-400 line-through" title="{{ p.other }} (no longer exists)">{{ p.other }}</span>
+                {% endif %}
+                <span class="shrink-0 text-xs tabular-nums text-gray-600">{{ p.co_commits }}× · {{ p.coupling_strength|floatformat:2 }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="mt-3 text-sm text-gray-500">No co-changes recorded.</p>
+        {% endif %}
+    </div>
+</aside>
