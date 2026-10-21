@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid gap-6 lg:grid-cols-3">
+    <section class="lg:col-span-2">
+        <div class="mb-6">
+            <h1 class="text-2xl font-bold text-gray-900">Analyse a git repository</h1>
+            <p class="mt-1 text-gray-600">Find the Python files that are both complex and frequently changed, and the files that always change together.</p>
+        </div>
+        <div id="wizard" class="bg-white shadow rounded-lg">
+            {% include "analyzer/partials/step_repo.html" %}
+        </div>
+    </section>
+
+    <aside>
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-gray-500 mb-3">Recent analyses</h2>
+        {% if recent %}
+        <ul class="bg-white shadow rounded-lg divide-y divide-gray-100">
+            {% for analysis in recent %}
+            <li class="flex items-center gap-3 px-4 py-3">
+                <a href="{{ analysis.get_absolute_url }}" class="min-w-0 flex-1 group">
+                    <p class="truncate font-medium text-gray-900 group-hover:text-indigo-600">{{ analysis.repo_name }}</p>
+                    <p class="truncate text-xs text-gray-500">{{ analysis.branch }} · {{ analysis.created_at|timesince }} ago</p>
+                </a>
+                {% include "analyzer/partials/status_badge.html" %}
+                <button hx-delete="{% url 'delete_analysis' analysis.pk %}"
+                        hx-target="closest li" hx-swap="outerHTML"
+                        hx-confirm="Delete this analysis?"
+                        class="text-gray-400 hover:text-red-600" title="Delete">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.44c-.8.08-1.58.18-2.36.3a.75.75 0 1 0 .22 1.49l.15-.03.84 10.52A2.75 2.75 0 0 0 7.59 19h4.82a2.75 2.75 0 0 0 2.74-2.53l.84-10.52.15.03a.75.75 0 0 0 .22-1.49A41 41 0 0 0 14 4.19v-.44A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.67.03 2.5.08v-.33c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.33C8.33 4.03 9.16 4 10 4Z" clip-rule="evenodd"/></svg>
+                </button>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="text-sm text-gray-500">No analyses yet.</p>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}

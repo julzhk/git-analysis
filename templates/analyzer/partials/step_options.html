@@ -1,0 +1,73 @@
+{% load analyzer_tags %}
+{% wizard_steps 2 %}
+<form hx-post="{% url 'create_analysis' %}" hx-target="#wizard" hx-indicator="#start-spinner"
+      hx-disabled-elt="find button" class="px-4 py-6 sm:px-6 space-y-5">
+    <input type="hidden" name="repo_url" value="{{ form.repo_url.value }}">
+    {% for branch in branches %}<input type="hidden" name="branches" value="{{ branch }}">{% endfor %}
+
+    <div class="rounded-md bg-gray-50 px-3 py-2 text-sm">
+        <span class="text-gray-500">Repository</span>
+        <span class="ml-2 font-mono text-gray-900 break-all">{{ form.repo_url.value }}</span>
+        {% for error in form.repo_url.errors %}<p class="mt-1 text-red-600">{{ error }}</p>{% endfor %}
+    </div>
+
+    <div>
+        <label for="id_branch" class="block text-sm font-medium text-gray-700">Branch</label>
+        {% if branches %}
+        <select name="branch" id="id_branch"
+                class="mt-1 block w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            {% for branch in branches %}
+            <option value="{{ branch }}" {% if branch == form.branch.value %}selected{% endif %}>{{ branch }}{% if forloop.first %} (default){% endif %}</option>
+            {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" name="branch" id="id_branch" value="{{ form.branch.value|default:'' }}"
+               class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        {% endif %}
+        {% for error in form.branch.errors %}<p class="mt-2 text-sm text-red-600">{{ error }}</p>{% endfor %}
+        <p class="mt-1 text-xs text-gray-500">{{ branches|length }} branch{{ branches|length|pluralize:"es" }} found.</p>
+    </div>
+
+    <details class="group rounded-md border border-gray-200" {% if form.errors %}open{% endif %}>
+        <summary class="cursor-pointer select-none px-3 py-2 text-sm font-medium text-gray-700">Advanced options</summary>
+        <div class="space-y-4 border-t border-gray-200 px-3 py-4">
+            <div>
+                <label for="id_exclude_dirs" class="block text-sm font-medium text-gray-700">Exclude directories</label>
+                <input type="text" name="exclude_dirs" id="id_exclude_dirs"
+                       value="{{ form.exclude_dirs.value }}"
+                       class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <p class="mt-1 text-xs text-gray-500">Comma separated. Any file with one of these in its path is skipped.</p>
+            </div>
+            <div>
+                <label for="id_exclude_files" class="block text-sm font-medium text-gray-700">Exclude file names</label>
+                <input type="text" name="exclude_files" id="id_exclude_files"
+                       value="{{ form.exclude_files.value }}"
+                       class="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            </div>
+            <div>
+                <label for="id_max_changeset" class="block text-sm font-medium text-gray-700">Max files per commit for coupling</label>
+                <input type="number" name="max_changeset" id="id_max_changeset" min="2" max="10000"
+                       value="{{ form.max_changeset.value }}"
+                       class="mt-1 block w-32 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                {% for error in form.max_changeset.errors %}<p class="mt-2 text-sm text-red-600">{{ error }}</p>{% endfor %}
+                <p class="mt-1 text-xs text-gray-500">Huge commits (reformatting, mass renames) say little about coupling and create a quadratic number of pairs.</p>
+            </div>
+        </div>
+    </details>
+
+    <div class="flex items-center justify-between gap-3">
+        <button type="button" hx-get="{% url 'step_repo' %}?repo_url={{ form.repo_url.value|urlencode }}" hx-target="#wizard"
+                class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+            ← Back
+        </button>
+        <div class="flex items-center gap-3">
+            <span id="start-spinner" class="htmx-indicator flex items-center gap-2 text-sm text-gray-500">
+                {% include "analyzer/partials/spinner.html" %} Starting…
+            </span>
+            <button type="submit"
+                    class="inline-flex items-center rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50">
+                Run analysis
+            </button>
+        </div>
+    </div>
+</form>

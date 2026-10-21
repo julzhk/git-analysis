@@ -1,0 +1,63 @@
+{% load analyzer_tags %}
+<div class="grid gap-6 lg:grid-cols-3">
+    <section class="lg:col-span-2 rounded-lg bg-white shadow overflow-hidden">
+        <div class="px-4 pt-4">
+            <h2 class="font-semibold text-gray-900">Top 30 riskiest files</h2>
+            <p class="text-sm text-gray-500">High complexity combined with a high rate of change: <code class="font-mono">risk = avg_cc × ln(1 + change_rate)</code>.</p>
+        </div>
+        <div class="overflow-x-auto">
+        <table class="mt-3 min-w-full text-sm">
+            <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                <tr>
+                    <th class="px-3 py-2 text-left">#</th>
+                    <th class="px-3 py-2 text-left">File</th>
+                    <th class="px-3 py-2 text-right">Avg CC</th>
+                    <th class="px-3 py-2 text-right">Rate/mo</th>
+                    <th class="px-3 py-2 text-left w-48">Risk</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 tabular-nums">
+                {% with top=hotspots.0.risk_score %}
+                {% for f in hotspots %}
+                <tr class="cursor-pointer hover:bg-indigo-50"
+                    hx-get="{% url 'file_detail' analysis.pk %}?path={{ f.file|urlencode }}" hx-target="#file-panel">
+                    <td class="px-3 py-2 text-gray-400">{{ forloop.counter }}</td>
+                    <td class="px-3 py-2 max-w-xs">
+                        <div class="flex items-center gap-1.5">
+                            <span class="truncate font-mono text-xs" title="{{ f.file }}">{{ f.file }}</span>
+                            {% include "analyzer/partials/file_link.html" with path=f.file %}
+                        </div>
+                    </td>
+                    <td class="px-3 py-2 text-right">{{ f.avg_cc|floatformat:2 }} <span class="ml-1 rounded px-1.5 py-0.5 text-xs font-semibold {{ f.cc_rank|rank_classes }}">{{ f.cc_rank }}</span></td>
+                    <td class="px-3 py-2 text-right">{{ f.change_rate|floatformat:2 }}</td>
+                    <td class="px-3 py-2">
+                        <div class="flex items-center gap-2">
+                            <div class="h-2 flex-1 rounded-full bg-gray-100"><div class="h-2 rounded-full bg-red-500" style="width: {{ f.risk_score|percent_of:top }}%"></div></div>
+                            <span class="w-10 text-right font-semibold">{{ f.risk_score|floatformat:2 }}</span>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="5" class="px-3 py-8 text-center text-gray-500">No file has been changed more than once, so there is no rate of change to score.</td></tr>
+                {% endfor %}
+                {% endwith %}
+            </tbody>
+        </table>
+        </div>
+    </section>
+
+    <aside class="rounded-lg bg-white p-4 shadow h-fit">
+        <h2 class="font-semibold text-gray-900">Reading the quadrants</h2>
+        <div class="mt-4 grid grid-cols-2 gap-2 text-sm">
+            <div class="rounded-md bg-amber-50 p-3"><p class="font-semibold text-amber-800">Watch</p><p class="text-amber-700">Low Complexity & high rate of change</p></div>
+            <div class="rounded-md bg-red-50 p-3"><p class="font-semibold text-red-800">High risk</p><p class="text-red-700">High Complexity, high rate of churn — higher prioritise to
+                refactor</p></div>
+            <div class="rounded-md bg-emerald-50 p-3"><p class="font-semibold text-emerald-800">Healthy</p><p class="text-emerald-700">Low Complexity, low rate of change</p></div>
+            <div class="rounded-md bg-orange-50 p-3"><p class="font-semibold text-orange-800">Refactor when touched</p><p class="text-orange-700">High Complexity, low rate of change</p></div>
+        </div>
+        <p class="mt-2 flex justify-between text-xs text-gray-400"><span>← simpler</span><span>more complex →</span></p>
+        <p class="mt-4 text-sm text-gray-600">
+            Complex code that rarely changes doesn't call out for fixing.
+            Complex code that changes frequently is an opportunity for bugs.</p>
+    </aside>
+</div>

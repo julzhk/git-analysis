@@ -1,0 +1,40 @@
+<div id="progress" class="px-4 py-6 sm:px-6"
+     {% if not analysis.is_finished %}hx-get="{% url 'analysis_progress' analysis.pk %}" hx-trigger="every 1s" hx-swap="outerHTML"{% endif %}>
+    <ol class="space-y-3">
+        {% for key, label, state in analysis.stage_states %}
+        <li class="flex items-center gap-3">
+            {% if state == "done" %}
+                <span class="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white">
+                    <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.58l7.3-7.3a1 1 0 0 1 1.4 0Z" clip-rule="evenodd"/></svg>
+                </span>
+                <span class="text-gray-700">{{ label }}</span>
+            {% elif state == "current" %}
+                <span class="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-50">{% include "analyzer/partials/spinner.html" %}</span>
+                <span class="font-semibold text-indigo-700">{{ label }}</span>
+                {% if analysis.message %}<span class="text-sm text-gray-500 truncate">— {{ analysis.message }}</span>{% endif %}
+            {% elif state == "failed" %}
+                <span class="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white font-bold text-sm">!</span>
+                <span class="font-semibold text-red-700">{{ label }}</span>
+            {% else %}
+                <span class="h-6 w-6 rounded-full border-2 border-gray-200"></span>
+                <span class="text-gray-400">{{ label }}</span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ol>
+
+    {% if analysis.status == "failed" %}
+    <div class="mt-6 rounded-md border border-red-200 bg-red-50 p-4">
+        <p class="font-semibold text-red-800">The analysis failed</p>
+        <pre class="mt-2 whitespace-pre-wrap break-all font-mono text-sm text-red-700">{{ analysis.error }}</pre>
+        <div class="mt-4 flex gap-3">
+            <button hx-post="{% url 'rerun_analysis' analysis.pk %}"
+                    class="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700">Try again</button>
+            <a href="{% url 'index' %}?repo_url={{ analysis.repo_url|urlencode }}"
+               class="rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50">Change settings</a>
+        </div>
+    </div>
+    {% else %}
+    <p class="mt-6 text-sm text-gray-500">Large repositories can take a few minutes. You can leave this page and come back — the analysis keeps running.</p>
+    {% endif %}
+</div>

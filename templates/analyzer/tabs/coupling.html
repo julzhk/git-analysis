@@ -1,0 +1,82 @@
+{% load analyzer_tags %}
+<div class="space-y-6">
+    <section class="rounded-lg bg-white p-4 shadow">
+        <h2 class="font-semibold text-gray-900">Logical coupling heatmap</h2>
+        <p class="text-sm text-gray-500">
+            Files that change in the same commit are logically coupled — a sign of hidden dependencies or shared responsibility.
+            Showing the {{ results.heatmap.files|length }} files with the most co-change partners; {{ results.pair_total }} coupled pairs in total.
+            {% if results.skipped_commits %}{{ results.skipped_commits }} commit{{ results.skipped_commits|pluralize }} touching more than {{ results.max_changeset }} files {{ results.skipped_commits|pluralize:"was,were" }} ignored.{% endif %}
+        </p>
+        {% if results.heatmap.files|length > 1 %}
+        <img src="{% url 'chart' analysis.pk 'coupling_heatmap' %}" alt="Heatmap of co-commits between the most coupled files" class="mx-auto mt-3 w-full max-w-4xl" loading="lazy">
+        {% else %}
+        <p class="mt-4 text-sm text-gray-500">Not enough multi-file commits to show coupling.</p>
+        {% endif %}
+    </section>
+
+    <div class="grid gap-6 lg:grid-cols-3">
+        <section class="lg:col-span-2 rounded-lg bg-white shadow overflow-hidden">
+            <div class="px-4 pt-4">
+                <h2 class="font-semibold text-gray-900">Most coupled pairs</h2>
+                <p class="text-sm text-gray-500">Strength = co-commits ÷ commits touching either file (Jaccard, 0–1).</p>
+            </div>
+            <div class="overflow-x-auto">
+            <table class="mt-3 min-w-full text-sm">
+                <thead class="bg-gray-50 text-xs uppercase text-gray-500">
+                    <tr>
+                        <th class="px-3 py-2 text-left">Pair</th>
+                        <th class="px-3 py-2 text-left w-40">Co-commits</th>
+                        <th class="px-3 py-2 text-right">Strength</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100 tabular-nums">
+                    {% for p in pairs %}
+                    <tr>
+                        <td class="px-3 py-2 max-w-md">
+                            <div class="flex items-center gap-1.5">
+                                <span class="truncate font-mono text-xs text-gray-900" title="{{ p.file_a }}">{{ p.file_a }}</span>
+                                {% include "analyzer/partials/file_link.html" with path=p.file_a %}
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <span class="truncate font-mono text-xs text-gray-500" title="{{ p.file_b }}">↔ {{ p.file_b }}</span>
+                                {% include "analyzer/partials/file_link.html" with path=p.file_b %}
+                            </div>
+                        </td>
+                        <td class="px-3 py-2">
+                            <div class="flex items-center gap-2">
+                                <div class="h-2 flex-1 rounded-full bg-gray-100"><div class="h-2 rounded-full bg-orange-400" style="width: {{ p.co_commits|percent_of:max_co_commits }}%"></div></div>
+                                <span class="w-8 text-right">{{ p.co_commits }}</span>
+                            </div>
+                        </td>
+                        <td class="px-3 py-2 text-right {% if p.coupling_strength >= 0.5 %}font-semibold text-red-600{% endif %}">{{ p.coupling_strength|floatformat:2 }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="3" class="px-3 py-8 text-center text-gray-500">No coupled files found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </section>
+
+        <section class="rounded-lg bg-white shadow overflow-hidden h-fit">
+            <div class="px-4 pt-4">
+                <h2 class="font-semibold text-gray-900">Coupling degree</h2>
+                <p class="text-sm text-gray-500">Distinct files each file has changed with.</p>
+            </div>
+            <ul class="mt-3 divide-y divide-gray-100 text-sm">
+                {% for d in degree %}
+                <li class="px-4 py-2">
+                    <div class="flex justify-between gap-2">
+                        <span class="flex min-w-0 items-center gap-1.5">
+                            <span class="truncate font-mono text-xs" title="{{ d.file }}">{{ d.file|basename }}</span>
+                            {% include "analyzer/partials/file_link.html" with path=d.file %}
+                        </span>
+                        <span class="tabular-nums text-gray-600">{{ d.coupling_degree }}</span>
+                    </div>
+                    <div class="mt-1 h-1.5 rounded-full bg-gray-100"><div class="h-1.5 rounded-full bg-indigo-400" style="width: {{ d.coupling_degree|percent_of:max_degree }}%"></div></div>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+    </div>
+</div>

@@ -1,0 +1,113 @@
+{% load analyzer_tags %}
+<div id="{{ chart.id }}-chart">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+        <div>
+            <h2 class="font-semibold text-gray-900">{{ chart.title }}</h2>
+            <p class="text-sm text-gray-500">
+                {{ chart.description|safe }} ({{ chart.labelled_count }} labels shown without overlap.)
+                Hover a point for its path, click it for details.
+            </p>
+        </div>
+        <div class="inline-flex rounded-md border border-gray-300 text-xs font-medium" role="group" aria-label="Axis scale">
+            {% for value, label in chart.scales %}
+            <button hx-get="{% url 'scatter_chart' analysis.pk chart.id %}?scale={{ value }}" hx-target="#{{ chart.id }}-chart" hx-swap="outerHTML"
+                    class="px-3 py-1 first:rounded-l-md last:rounded-r-md {% if chart.scale == value %}bg-indigo-600 text-white{% else %}bg-white text-gray-700 hover:bg-gray-50{% endif %}"
+                    {% if chart.scale == value %}aria-pressed="true"{% endif %}>{{ label }}</button>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="relative mt-3" id="{{ chart.id }}-wrap">
+        <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="w-full h-auto select-none" role="img"
+             aria-label="{{ chart.aria_label }}">
+            {# grid + axes #}
+            <g class="text-gray-500" font-size="11" fill="currentColor">
+                {% for t in chart.x_ticks %}
+                <line x1="{{ t.x }}" x2="{{ t.x }}" y1="{{ chart.plot.top }}" y2="{{ chart.plot.bottom }}" stroke="#e5e7eb"/>
+                <text x="{{ t.x }}" y="{{ chart.plot.bottom|add:16 }}" text-anchor="middle">{{ t.label }}</text>
+                {% endfor %}
+                {% for t in chart.y_ticks %}
+                <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.right }}" y1="{{ t.y }}" y2="{{ t.y }}" stroke="#e5e7eb"/>
+                <text x="{{ chart.plot.left|add:-8 }}" y="{{ t.y }}" text-anchor="end" dominant-baseline="middle">{{ t.label }}</text>
+                {% endfor %}
+                <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.right }}" y1="{{ chart.plot.bottom }}" y2="{{ chart.plot.bottom }}" stroke="#9ca3af"/>
+                <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.left }}" y1="{{ chart.plot.top }}" y2="{{ chart.plot.bottom }}" stroke="#9ca3af"/>
+                <text x="{{ chart.plot.cx }}" y="{{ chart.height|add:-6 }}" text-anchor="middle" font-size="12">
+                    {{ chart.x_label }}{% if chart.x_log %} — log scale{% endif %}
+                </text>
+                <text transform="translate(14 {{ chart.plot.cy }}) rotate(-90)" text-anchor="middle" font-size="12">
+                    {{ chart.y_label }}{% if chart.y_log %} — log{% endif %}
+                </text>
+            </g>
+            {% for t in chart.thresholds %}
+            <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.right }}" y1="{{ t.y }}" y2="{{ t.y }}"
+                  stroke="{{ t.colour }}" stroke-dasharray="5 4" opacity="0.8"/>
+            <text x="{{ chart.plot.right }}" y="{{ t.y|add:-4 }}" text-anchor="end" font-size="10" fill="{{ t.colour }}">{{ chart.threshold_prefix }} {{ t.value }}</text>
+            {% endfor %}
+
+            {# points #}
+            {% for p in chart.points %}
+            <g class="chart-point cursor-pointer outline-none" tabindex="0" role="button"
+               aria-label="{{ p.file.file }}: {{ p.file.loc }} lines, avg CC {{ p.file.avg_cc|default:'n/a' }}, {{ p.file.change_rate }} commits per month, churn {{ p.file.churn }}"
+               data-path="{{ p.file.file }}" data-cc="{{ p.file.avg_cc|floatformat:2|default:'—' }}" data-max="{{ p.file.max_cc|default_if_none:'—' }}"
+               data-rank="{{ p.file.cc_rank|default:'—' }}" data-rate="{{ p.file.change_rate|floatformat:2 }}" data-loc="{{ p.file.loc }}"
+               data-commits="{{ p.file.n_commits }}" data-churn="{{ p.file.churn }}" data-risk="{{ p.file.risk_score|floatformat:2|default:'—' }}"
+               hx-get="{% url 'file_detail' analysis.pk %}?path={{ p.file.file|urlencode }}" hx-target="#file-panel"
+               hx-trigger="click, keyup[key=='Enter']">
+                <circle cx="{{ p.x }}" cy="{{ p.y }}" r="{{ p.r }}" fill="{{ p.colour }}" fill-opacity="0.72"
+                        stroke="#1f2937" stroke-opacity="0.35" stroke-width="0.8"/>
+            </g>
+            {% endfor %}
+
+            {# labels on top, with a white halo #}
+            <g font-size="11" fill="#1f2937" stroke="white" stroke-width="3" paint-order="stroke" pointer-events="none"
+               font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+                {% for p in chart.points %}{% if p.label %}
+                <text x="{{ p.label_x }}" y="{{ p.label_y }}">{{ p.label }}</text>
+                {% endif %}{% endfor %}
+            </g>
+        </svg>
+
+        <div id="{{ chart.id }}-tooltip" role="tooltip"
+             class="pointer-events-none absolute z-10 hidden max-w-sm rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-lg">
+            <p class="break-all font-mono font-semibold" data-field="path"></p>
+            <p class="mt-1 text-gray-300">
+                avg CC <span data-field="cc"></span> · max <span data-field="max"></span> (<span data-field="rank"></span>)
+                · <span data-field="rate"></span>/mo · <span data-field="commits"></span> commits
+                · <span data-field="loc"></span> LOC · churn <span data-field="churn"></span> · risk <span data-field="risk"></span>
+            </p>
+        </div>
+    </div>
+
+    <ul class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600">
+        {% for rank, colour in chart.legend %}
+        <li class="flex items-center gap-1.5"><span class="inline-block h-3 w-3 rounded-full" style="background: {{ colour }}"></span>Rank {{ rank }}</li>
+        {% endfor %}
+    </ul>
+
+    <script>
+    (() => {
+        const wrap = document.getElementById("{{ chart.id }}-wrap");
+        const tip = document.getElementById("{{ chart.id }}-tooltip");
+        const show = (point) => {
+            for (const el of tip.querySelectorAll("[data-field]")) el.textContent = point.dataset[el.dataset.field];
+            const box = wrap.getBoundingClientRect(), dot = point.getBoundingClientRect();
+            tip.classList.remove("hidden");
+            const left = Math.min(dot.left - box.left + dot.width / 2 + 12, box.width - tip.offsetWidth);
+            tip.style.left = `${Math.max(0, left)}px`;
+            tip.style.top = `${Math.max(0, dot.top - box.top - tip.offsetHeight - 6)}px`;
+            point.querySelector("circle").setAttribute("stroke-opacity", "1");
+        };
+        const hide = (point) => {
+            tip.classList.add("hidden");
+            point.querySelector("circle").setAttribute("stroke-opacity", "0.35");
+        };
+        for (const point of wrap.querySelectorAll(".chart-point")) {
+            point.addEventListener("mouseenter", () => show(point));
+            point.addEventListener("focus", () => show(point));
+            point.addEventListener("mouseleave", () => hide(point));
+            point.addEventListener("blur", () => hide(point));
+        }
+    })();
+    </script>
+</div>

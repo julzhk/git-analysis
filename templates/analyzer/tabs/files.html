@@ -1,0 +1,18 @@
+<div class="rounded-lg bg-white shadow">
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 px-4 py-3">
+        <div class="relative w-full sm:w-80">
+            <input type="search" name="q" value="{{ q }}" placeholder="Filter by path…"
+                   hx-get="{% url 'files_table' analysis.pk %}"
+                   hx-trigger="input changed delay:300ms, search"
+                   hx-target="#files-table"
+                   hx-include="#files-table [name='sort'], #files-table [name='dir']"
+                   hx-indicator="#files-spinner"
+                   class="block w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+            <span id="files-spinner" class="htmx-indicator absolute right-8 top-2">{% include "analyzer/partials/spinner.html" %}</span>
+        </div>
+        <p class="text-xs text-gray-500">Click a column to sort, a file for details.</p>
+    </div>
+    <div id="files-table">
+        {% include "analyzer/partials/files_table.html" %}
+    </div>
+</div>
