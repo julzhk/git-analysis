@@ -65,4 +65,4 @@ Python only, and the metrics are heuristics. See [`skills/git-code-quality/refer
 
 ## License
 
-GPL-3.0-or-later. See [LICENSE](../../LICENSE).
+Open source under GPL-3.0-or-later. See [LICENSE](LICENSE).

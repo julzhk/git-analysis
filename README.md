@@ -1,6 +1,10 @@
-# Git Analysis
+# Git Analysis: a Claude Code skill for code-quality hotspots
 
-A small web tool that analyses a git repository's **Python code quality alongside its change history**. It answers three questions:
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
+**Ask Claude "where are the riskiest files in this repo?" and get an answer grounded in the git history.**
+
+`git-code-quality` is a [Claude Code](https://claude.com/claude-code) skill. It mines a repository's history and measures its Python code, then Claude explains the results and suggests what to refactor first. It answers three questions:
 
 1. **Which files are hard to understand and test?** (cyclomatic complexity, maintainability index)
 2. **Which files change the most?** (commit frequency, churn)
@@ -12,22 +16,47 @@ Combining (1) and (2) gives a ranked list of **hotspots**: complex code that kee
 > borrows from forensic psychology: just as investigators map where crimes cluster, we can mine version-control history to find where problems in a codebase cluster. Hotspot analysis (complexity × 
 > change frequency) and change coupling both come from that approach. This tool is a small, Python-focused take on those ideas. If you find it useful read the book! : it goes much further, covering team dynamics, knowledge loss and architectural decay.
 
-The tool started as a Jupyter notebook ([`notebooks/git_code_quality.ipynb`](notebooks/git_code_quality.ipynb)) and is now a Django app with an HTMX-driven, multi-step interface styled with Tailwind CSS.
+## Quick start
 
-![Overview of an analysis](docs/screenshots/4-overview.png)
+In Claude Code:
+
+```
+/plugin install git-code-quality --marketplace julzhk/git-analysis
+```
+
+On older Claude Code versions, run `/plugin marketplace add julzhk/git-analysis` first, then `/plugin install git-code-quality@git-analysis`.
+
+You need `git` and [`uv`](https://docs.astral.sh/uv/). Without `uv`, run `pip install radon jinja2`. Then just ask:
+
+- *"What are the code-quality hotspots in this repo?"*
+- *"Analyse https://github.com/psf/requests.git and tell me what to refactor first."*
+- *"Which files in this project are logically coupled? Ignore the tests directory."*
+
+Claude runs the bundled analysis script and writes up a short report: the headline numbers, the top hotspots and *why* each one ranks there, suspicious coupled pairs, concrete next steps and the caveats that apply to your repo. It also writes a self-contained, offline **`report.html`** with interactive charts. Hover a point for its path and metrics; click it to open the file on GitHub, GitLab or Bitbucket.
+
+![The skill's HTML report for psf/requests](docs/screenshots/skill-report.png)
+
+More detail is in [Using the skill](#using-the-skill).
+
+### Also available as a web app
+
+The same analysis code also powers a Django web app with an HTMX-driven, multi-step interface styled with Tailwind CSS. It adds a sortable file table, a coupling heatmap and a per-file detail panel. The project started as a Jupyter notebook ([`notebooks/git_code_quality.ipynb`](notebooks/git_code_quality.ipynb)).
+
+![Overview of an analysis in the web app](docs/screenshots/4-overview.png)
 
 ---
 
 ## Contents
 
+- [Quick start](#quick-start)
 - [Intended purpose](#intended-purpose)
+- [Using the skill](#using-the-skill)
 - [How it works](#how-it-works)
 - [The metrics and why they matter](#the-metrics-and-why-they-matter)
-- [Screenshots](#screenshots)
-- [Installation](#installation)
-- [Running](#running)
-- [Use it as a Claude Code skill](#use-it-as-a-claude-code-skill)
-- [Configuration](#configuration)
+- [Web app: screenshots](#web-app-screenshots)
+- [Web app: installation](#web-app-installation)
+- [Web app: running](#web-app-running)
+- [Web app: configuration](#web-app-configuration)
 - [Project layout](#project-layout)
 - [Limitations and caveats](#limitations-and-caveats)
 - [References](#references)
@@ -47,12 +76,28 @@ It is not a linter, a test-coverage tool or a measure of developer productivity 
 
 ---
 
+## Using the skill
+
+Install it as shown in the [Quick start](#quick-start).
+
+The skill runs `plugins/git-code-quality/skills/git-code-quality/scripts/analyse.py`. It analyses the current repo or a URL, prints a Markdown summary for Claude to interpret, and writes `results.json` plus a self-contained `report.html` with the interactive charts. It needs [`uv`](https://docs.astral.sh/uv/), or `pip install radon jinja2`. You can also run the script yourself:
+
+```bash
+uv run plugins/git-code-quality/skills/git-code-quality/scripts/analyse.py https://github.com/psf/requests.git --out /tmp/requests-quality
+```
+
+See [`plugins/git-code-quality/README.md`](plugins/git-code-quality/README.md) for options. To try local changes, run `claude --plugin-dir plugins/git-code-quality`.
+
+The plugin carries copies of `analyzer/analysis.py`, `bubble.py` and `links.py`. After changing those, run `python scripts/sync_plugin.py`; a test fails while the copies are stale.
+
+---
+
 ## How it works
 
 
 ### Analysis pipeline
 
-When you start an analysis, a background thread clones the repository into a temporary directory and runs the pipeline below. Progress is written to the database after each stage, and the browser 
+The skill's script and the web app run the same pipeline. The script clones into a temporary directory, writes `results.json` and `report.html`, and prints a summary for Claude. In the web app, a background thread clones the repository into a temporary directory and runs the pipeline below. Progress is written to the database after each stage, and the browser 
 polls for it. The temporary clone is deleted afterwards and only the computed results (JSON) are kept.
 
 ```mermaid
@@ -115,7 +160,7 @@ quadrantChart
 
 ---
 
-## Screenshots
+## Web app: screenshots
 
 Screenshots were taken with the example repo: [`psf/requests`](https://github.com/psf/requests).
 
@@ -141,7 +186,9 @@ Screenshots were taken with the example repo: [`psf/requests`](https://github.co
 
 ---
 
-## Installation
+## Web app: installation
+
+Not needed for the skill, which carries its own script.
 
 ### Requirements
 
@@ -171,7 +218,7 @@ uv run python manage.py tailwind build
 
 ---
 
-## Running
+## Web app: running
 
 ### Development server
 
@@ -201,29 +248,7 @@ Open `notebooks/git_code_quality.ipynb` in VS Code, PyCharm or Jupyter, using th
 
 ---
 
-## Use it as a Claude Code skill
-
-The same analysis is packaged as a [Claude Code](https://claude.com/claude-code) plugin, so you can ask Claude *"what are the hotspots in this repo?"* without running the web app. In Claude Code:
-
-```
-/plugin install git-code-quality --marketplace julzhk/git-analysis
-```
-
-On older Claude Code versions, run `/plugin marketplace add julzhk/git-analysis` first, then `/plugin install git-code-quality@git-analysis`.
-
-The skill runs `plugins/git-code-quality/skills/git-code-quality/scripts/analyse.py`. It analyses the current repo or a URL, prints a Markdown summary for Claude to interpret, and writes `results.json` plus a self-contained `report.html` with the interactive charts. It needs [`uv`](https://docs.astral.sh/uv/), or `pip install radon jinja2`. You can also run the script yourself:
-
-```bash
-uv run plugins/git-code-quality/skills/git-code-quality/scripts/analyse.py https://github.com/psf/requests.git --out /tmp/requests-quality
-```
-
-See [`plugins/git-code-quality/README.md`](plugins/git-code-quality/README.md) for options. To try local changes, run `claude --plugin-dir plugins/git-code-quality`.
-
-The plugin carries copies of `analyzer/analysis.py`, `bubble.py` and `links.py`. After changing those, run `python scripts/sync_plugin.py`; a test fails while the copies are stale.
-
----
-
-## Configuration
+## Web app: configuration
 
 Settings live in `git_analysis/settings.py`:
 
@@ -278,7 +303,7 @@ templates/
   analyzer/        # pages, tabs/ and partials/ for HTMX swaps
 notebooks/
   git_code_quality.ipynb   # the original analysis
-plugins/git-code-quality/  # Claude Code plugin: skill, CLI script, HTML report template
+plugins/git-code-quality/  # the Claude Code plugin: SKILL.md, CLI script, HTML report template, LICENSE
 .claude-plugin/marketplace.json
 scripts/sync_plugin.py     # copy the shared analysis modules into the plugin
 docs/screenshots/
@@ -344,7 +369,9 @@ docs/screenshots/
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0**. See [`LICENSE`](LICENSE) for the full text, or <https://www.gnu.org/licenses/gpl-3.0.html>.
+Git Analysis, including the `git-code-quality` skill, is open source under the **GNU General Public License v3.0 or later** (`GPL-3.0-or-later`). You're free to use, study, share and modify it. If you distribute a modified version, it must also be released under the GPL, with its source code.
+
+The full text is in [`LICENSE`](LICENSE). A copy is also in [`plugins/git-code-quality/LICENSE`](plugins/git-code-quality/LICENSE), so installed copies of the plugin carry it too. It is also at <https://www.gnu.org/licenses/gpl-3.0.html>.
 
 ```
 Git Analysis — code quality × change history for git repositories
