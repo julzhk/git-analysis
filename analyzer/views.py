@@ -167,6 +167,8 @@ def _overview_context(request, results):
         "summary": summarise(files),
         "bubble": bubble.bubble_chart(files, request.GET.get("scale", "log")),
         "churn": bubble.churn_chart(files, request.GET.get("scale", "log")),
+        "top_cc": bubble.top_cc_chart(files),
+        "top_rate": bubble.top_rate_chart(files),
     }
 
 

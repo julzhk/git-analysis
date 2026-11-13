@@ -1,0 +1,14 @@
+{
+  "name": "git-analysis",
+  "description": "Git repository code-quality analysis (hotspots, complexity, churn, coupling) as a Claude Code skill.",
+  "owner": {
+    "name": "J Harley"
+  },
+  "plugins": [
+    {
+      "name": "git-code-quality",
+      "source": "./plugins/git-code-quality",
+      "description": "Analyse a git repository's Python code quality: complexity, maintainability, churn, hotspots and logical coupling, with an interactive HTML report."
+    }
+  ]
+}

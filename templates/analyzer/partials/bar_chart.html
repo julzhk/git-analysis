@@ -1,0 +1,32 @@
+<div id="{{ chart.id }}-chart">
+    <h2 class="font-semibold text-gray-900">{{ chart.title }}</h2>
+    <p class="text-sm text-gray-500">Hover a bar for the full path, click it for details.</p>
+
+    <div class="relative mt-3" id="{{ chart.id }}-wrap">
+        <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="w-full h-auto select-none" role="img"
+             aria-label="{{ chart.aria_label }}">
+            <g class="text-gray-500" font-size="11" fill="currentColor">
+                {% for t in chart.x_ticks %}
+                <line x1="{{ t.x }}" x2="{{ t.x }}" y1="{{ chart.plot.top }}" y2="{{ chart.plot.bottom }}" stroke="#e5e7eb"/>
+                <text x="{{ t.x }}" y="{{ chart.plot.bottom|add:16 }}" text-anchor="middle">{{ t.label }}</text>
+                {% endfor %}
+                <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.left }}" y1="{{ chart.plot.top }}" y2="{{ chart.plot.bottom }}" stroke="#9ca3af"/>
+                <text x="{{ chart.plot.cx }}" y="{{ chart.height|add:-4 }}" text-anchor="middle" font-size="12">{{ chart.x_label }}</text>
+            </g>
+
+            {% for b in chart.bars %}
+            <g {% include "analyzer/partials/chart_point_attrs.html" with f=b.file %}>
+                <rect x="{{ chart.plot.left }}" y="{{ b.y }}" width="{{ b.width }}" height="{{ b.height }}" rx="2"
+                      fill="{{ b.colour }}" stroke="#1f2937" stroke-opacity="0.35" stroke-width="0.8"/>
+                <text x="{{ chart.plot.left|add:-6 }}" y="{{ b.cy }}" text-anchor="end" dominant-baseline="middle"
+                      font-size="11" fill="#1f2937" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">{{ b.label }}</text>
+                <text x="{{ b.end|add:4 }}" y="{{ b.cy }}" dominant-baseline="middle" font-size="10" fill="#6b7280">{{ b.value }}</text>
+                {# transparent hit area, so the label and the gap after a short bar respond too #}
+                <rect x="0" y="{{ b.y|add:-3 }}" width="{{ chart.width }}" height="{{ b.height|add:6 }}" fill="transparent"/>
+            </g>
+            {% endfor %}
+        </svg>
+
+        {% include "analyzer/partials/chart_tooltip.html" %}
+    </div>
+</div>

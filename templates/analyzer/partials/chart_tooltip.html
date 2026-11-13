@@ -1,0 +1,35 @@
+{# Tooltip for .chart-point elements inside #<chart.id>-wrap; each point carries the file's metrics as data-* attributes. #}
+<div id="{{ chart.id }}-tooltip" role="tooltip"
+     class="pointer-events-none absolute z-10 hidden max-w-sm rounded-md bg-gray-900 px-3 py-2 text-xs text-white shadow-lg">
+    <p class="break-all font-mono font-semibold" data-field="path"></p>
+    <p class="mt-1 text-gray-300">
+        avg CC <span data-field="cc"></span> · max <span data-field="max"></span> (<span data-field="rank"></span>)
+        · <span data-field="rate"></span>/mo · <span data-field="commits"></span> commits
+        · <span data-field="loc"></span> LOC · churn <span data-field="churn"></span> · risk <span data-field="risk"></span>
+    </p>
+</div>
+<script>
+(() => {
+    const wrap = document.getElementById("{{ chart.id }}-wrap");
+    const tip = document.getElementById("{{ chart.id }}-tooltip");
+    const show = (point) => {
+        for (const el of tip.querySelectorAll("[data-field]")) el.textContent = point.dataset[el.dataset.field];
+        const box = wrap.getBoundingClientRect(), dot = point.getBoundingClientRect();
+        tip.classList.remove("hidden");
+        const left = Math.min(dot.left - box.left + dot.width / 2 + 12, box.width - tip.offsetWidth);
+        tip.style.left = `${Math.max(0, left)}px`;
+        tip.style.top = `${Math.max(0, dot.top - box.top - tip.offsetHeight - 6)}px`;
+        point.firstElementChild.setAttribute("stroke-opacity", "1");
+    };
+    const hide = (point) => {
+        tip.classList.add("hidden");
+        point.firstElementChild.setAttribute("stroke-opacity", "0.35");
+    };
+    for (const point of wrap.querySelectorAll(".chart-point")) {
+        point.addEventListener("mouseenter", () => show(point));
+        point.addEventListener("focus", () => show(point));
+        point.addEventListener("mouseleave", () => hide(point));
+        point.addEventListener("blur", () => hide(point));
+    }
+})();
+</script>

@@ -1,7 +1,9 @@
 import math
 import os
 import shutil
+import json
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -214,7 +216,7 @@ class ResultsViewTests(RepoTestCase):
         self.assertContains(response, "2×")
 
     def test_charts_render_png(self):
-        for name in ["top_cc", "top_change_rate", "mi_hist", "rank_donut", "coupling_heatmap"]:
+        for name in ["mi_hist", "rank_donut", "coupling_heatmap"]:
             response = self.client.get(reverse("chart", args=[self.analysis.pk, name]))
             self.assertEqual(response["Content-Type"], "image/png", name)
             self.assertTrue(response.content.startswith(b"\x89PNG"), name)
@@ -241,6 +243,31 @@ class ResultsViewTests(RepoTestCase):
         self.assertNotContains(response, "log scale")
         self.assertContains(response, 'data-path="app/core.py"')
         self.assertContains(response, f'hx-get="{url}?scale=log" hx-target="#churn-chart"')
+
+    def test_top_20_bar_charts_svg(self):
+        response = self.client.get(reverse("analysis_detail", args=[self.analysis.pk]))
+        for chart_id in ("top-cc", "top-rate"):
+            self.assertContains(response, f'id="{chart_id}-chart"')
+            self.assertContains(response, f'getElementById("{chart_id}-tooltip")')
+        self.assertContains(response, 'data-path="app/utils.py"', count=4)  # 2 scatters + 2 bar charts
+
+    def test_bar_chart_labels_disambiguate_and_truncate(self):
+        from .bubble import MAX_LABEL, bar_chart
+        long_path = "pkg/" + "x" * 40 + ".py"
+        files = [{"file": path, "avg_cc": cc, "change_rate": 1.0, "loc": 50, "cc_rank": "A"}
+                 for path, cc in [("src/utils.py", 4), ("tests/utils.py", 2), (long_path, 3), ("gone.py", None)]]
+        chart = bar_chart(files, "avg_cc", "{:.1f}", "Avg CC")
+        self.assertEqual([b["label"] for b in chart["bars"]][0::2], ["src/utils.py", "tests/utils.py"])
+        self.assertEqual(len(chart["bars"]), 3)  # files without a CC are left out
+        label = chart["bars"][1]["label"]
+        self.assertEqual(len(label), MAX_LABEL)
+        self.assertTrue(label.startswith("…") and label.endswith("xx.py"))
+        self.assertGreater(chart["bars"][0]["width"], chart["bars"][2]["width"])
+
+    def test_file_labels(self):
+        from .charts import file_labels
+        self.assertEqual(file_labels(["a/utils.py", "b/utils.py", "a/core.py"]),
+                         {"a/utils.py": "a/utils.py", "b/utils.py": "b/utils.py", "a/core.py": "core.py"})
 
     def test_log_ticks_are_thinned_and_cover_the_maximum(self):
         from .bubble import log_ticks
@@ -311,11 +338,16 @@ class RepoLinksTests(TestCase):
             self.assertIsNone(links.file("x.py"))
         self.assertFalse(RepoLinks("https://github.com/org/repo.git", None))
 
-    @override_settings(GIT_ANALYSIS_REPO_HOSTS={"git.example.com": "gitlab"})
     def test_custom_host_mapping(self):
         from .links import RepoLinks
-        links = RepoLinks("https://git.example.com/org/repo.git", self.SHA)
+        links = RepoLinks("https://git.example.com/org/repo.git", self.SHA, {"git.example.com": "gitlab"})
         self.assertEqual(links.commit(), f"https://git.example.com/org/repo/-/commit/{self.SHA}")
+
+    @override_settings(GIT_ANALYSIS_REPO_HOSTS={"git.example.com": "gitlab"})
+    def test_custom_host_mapping_from_settings(self):
+        analysis = Analysis(repo_url="https://git.example.com/org/repo.git", branch="main",
+                            results={"head_sha": self.SHA, "files": [{"file": "a.py"}]})
+        self.assertEqual(analysis.file_url("a.py"), f"https://git.example.com/org/repo/-/blob/{self.SHA}/a.py")
 
     def test_reports_link_existing_files_only(self):
         repo = make_repo()
@@ -335,3 +367,57 @@ class RepoLinksTests(TestCase):
         response = self.client.get(analysis.get_absolute_url())
         self.assertContains(response, f'href="https://github.com/org/repo/commit/{results["head_sha"]}"')
         self.assertIn(f"{base}app/core.py", self.client.get(reverse("files_csv", args=[analysis.pk])).content.decode())
+
+
+PLUGIN_SKILL = Path(__file__).resolve().parent.parent / "plugins/git-code-quality/skills/git-code-quality"
+
+
+class PluginTests(TestCase):
+    """The Claude Code skill in plugins/git-code-quality: shared code in sync, CLI and HTML report."""
+
+    def run_cli(self, *args):
+        return subprocess.run([sys.executable, str(PLUGIN_SKILL / "scripts/analyse.py"), *args],
+                              capture_output=True, text=True, timeout=120)
+
+    def test_shared_modules_in_sync(self):
+        from scripts.sync_plugin import PACKAGE, ROOT, SHARED
+        for source, target in SHARED.items():
+            self.assertEqual((ROOT / source).read_text(), (PACKAGE / target).read_text(),
+                             f"{target} is stale: run python scripts/sync_plugin.py")
+
+    def test_cli_analyses_local_repo(self):
+        repo, out = make_repo(), Path(tempfile.mkdtemp(prefix="git-quality-test-"))
+        self.addCleanup(shutil.rmtree, repo, ignore_errors=True)
+        self.addCleanup(shutil.rmtree, out, ignore_errors=True)
+        result = self.run_cli(str(repo), "--out", str(out))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("| app/core.py |", result.stdout)
+        self.assertIn("| app/core.py | app/utils.py | 2 | 0.67 |", result.stdout)
+        self.assertNotIn("migrations", result.stdout)
+
+        results = json.loads((out / "results.json").read_text())
+        self.assertEqual(results["meta"]["branch"], "main")
+        self.assertEqual({f["file"] for f in results["files"]}, {"app/core.py", "app/utils.py"})
+
+        html = (out / "report.html").read_text()
+        self.assertIn('data-path="app/core.py"', html)
+        self.assertIn('data-scale-view="linear"', html)
+        self.assertNotRegex(html, r"<(script|link|img)[^>]+(src|href)=")  # self-contained, works offline
+
+    def test_cli_other_branch_and_exclusions(self):
+        repo, out = make_repo(), Path(tempfile.mkdtemp(prefix="git-quality-test-"))
+        self.addCleanup(shutil.rmtree, repo, ignore_errors=True)
+        self.addCleanup(shutil.rmtree, out, ignore_errors=True)
+        result = self.run_cli(str(repo), "--branch", "feature", "--exclude-file", "utils.py", "--out", str(out))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("utils.py", result.stdout)
+        result = self.run_cli(str(repo), "--branch", "nope", "--out", str(out))
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("git error", result.stderr)
+
+    def test_cli_rejects_unsafe_targets(self):
+        for target in ["ext::sh -c id", "git://example.com/repo.git", "file:///tmp/repo", tempfile.gettempdir()]:
+            result = self.run_cli(target)
+            self.assertEqual(result.returncode, 2, target)
+        self.assertNotEqual(self.run_cli("--upload-pack=touch /tmp/x").returncode, 0)
+

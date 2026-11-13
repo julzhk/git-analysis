@@ -1,8 +1,18 @@
-"""Geometry for the interactive scatter charts (complexity vs change rate, churn vs LOC), rendered as inline SVG."""
+"""Geometry for the interactive charts (scatters and top-20 bars), rendered as inline SVG."""
 import math
-from collections import Counter
 
-from .charts import GREY, RANK_COLOUR
+RANK_COLOUR = {"A": "#2ecc71", "B": "#82e0aa", "C": "#f4d03f",
+               "D": "#f0b27a", "E": "#e59866", "F": "#e74c3c"}
+GREY = "#aab7b8"
+
+
+def file_labels(paths) -> dict[str, str]:
+    """{path: short label}: the file name, plus its parent directory when another file shares the name."""
+    paths = list(paths)
+    names = [p.rsplit("/", 1)[-1] for p in paths]
+    duplicates = {n for n in names if names.count(n) > 1}
+    return {p: "/".join(p.split("/")[-2:]) if n in duplicates else n for p, n in zip(paths, names)}
+
 
 WIDTH, HEIGHT = 1000, 470
 LEFT, RIGHT, TOP, BOTTOM = 64, 24, 16, 48
@@ -64,12 +74,6 @@ def _fmt(value: float) -> str:
     return f"{value:,.0f}" if value >= 1000 else f"{value:g}"
 
 
-def _label(path: str, duplicate_names: set[str]) -> str:
-    """File name, plus its parent directory when another file shares the name (e.g. two utils.py)."""
-    parts = path.split("/")
-    return "/".join(parts[-2:]) if parts[-1] in duplicate_names else parts[-1]
-
-
 def _place_labels(candidates: list[dict]):
     """Greedy label placement: try four spots around each bubble, skip the label if all collide."""
     taken = []  # (x0, y0, x1, y1)
@@ -96,8 +100,7 @@ def scatter(files, *, x_key, y_key, x_log, y_log, label_key, radius, y_min_max=1
 
     ranked = sorted((f for f in files if f[label_key]), key=lambda f: f[label_key], reverse=True)
     rank_of = {f["file"]: i for i, f in enumerate(ranked[:LABELLED])}
-    name_counts = Counter(f["file"].rsplit("/", 1)[-1] for f in files)
-    duplicate_names = {name for name, count in name_counts.items() if count > 1}
+    labels = file_labels(f["file"] for f in files)
 
     points = [{
         "file": f,
@@ -105,7 +108,7 @@ def scatter(files, *, x_key, y_key, x_log, y_log, label_key, radius, y_min_max=1
         "y": round(sy(f[y_key]), 1),
         "r": round(radius(f), 1),
         "colour": RANK_COLOUR.get(f["cc_rank"], GREY),
-        "label": _label(f["file"], duplicate_names) if f["file"] in rank_of else None,
+        "label": labels[f["file"]] if f["file"] in rank_of else None,
     } for f in files]
     _place_labels(sorted((p for p in points if p["label"]), key=lambda p: rank_of[p["file"]["file"]]))
     points.sort(key=lambda p: -p["r"])  # big bubbles underneath, so small ones stay hoverable
@@ -169,3 +172,55 @@ def churn_chart(files: list[dict], scale: str = "log") -> dict:
 
 
 CHARTS = {"bubble": bubble_chart, "churn": churn_chart}
+
+BAR_WIDTH, BAR_ROW, BAR_TOP, BAR_BOTTOM, BAR_RIGHT = 600, 22, 8, 40, 44
+MAX_LABEL = 30   # characters; longer labels keep their tail (…/pkg/utils.py)
+
+
+def bar_chart(files: list[dict], key: str, fmt: str, x_label: str, top: int = 20) -> dict:
+    """Horizontal bars for the top `top` files by `key`, labelled with disambiguated file names."""
+    files = [f for f in files if f["avg_cc"] is not None]
+    labels = file_labels(f["file"] for f in files)
+    ranked = sorted(files, key=lambda f: f[key], reverse=True)[:top]
+    names = [labels[f["file"]] if len(labels[f["file"]]) <= MAX_LABEL else "…" + labels[f["file"]][1 - MAX_LABEL:]
+             for f in ranked]
+    left = round(max((len(n) for n in names), default=4) * CHAR_WIDTH + 12)
+    height = BAR_TOP + len(ranked) * BAR_ROW + BAR_BOTTOM
+    bottom = height - BAR_BOTTOM
+    sx = Axis([f[key] for f in ranked], False, left, BAR_WIDTH - left - BAR_RIGHT, False, 0)
+    bars = [{
+        "file": f,
+        "label": name,
+        "y": BAR_TOP + i * BAR_ROW + 3,
+        "cy": BAR_TOP + i * BAR_ROW + BAR_ROW / 2,
+        "height": BAR_ROW - 6,
+        "width": round(max(sx(f[key]) - left, 1), 1),
+        "end": round(max(sx(f[key]), left + 1), 1),
+        "value": fmt.format(f[key]),
+        "colour": RANK_COLOUR.get(f["cc_rank"], GREY),
+    } for i, (f, name) in enumerate(zip(ranked, names))]
+    return {
+        "width": BAR_WIDTH,
+        "height": height,
+        "plot": {"left": left, "right": BAR_WIDTH - BAR_RIGHT, "top": BAR_TOP, "bottom": bottom,
+                 "cx": (left + BAR_WIDTH - BAR_RIGHT) / 2},
+        "x_ticks": [{"x": round(sx(t), 1), "label": _fmt(t)} for t in sx.ticks],
+        "bars": bars,
+        "x_label": x_label,
+    }
+
+
+def top_cc_chart(files):
+    return bar_chart(files, "avg_cc", "{:.1f}", "Average cyclomatic complexity") | {
+        "id": "top-cc",
+        "title": "Top 20 files — average cyclomatic complexity",
+        "aria_label": "Bar chart of the 20 files with the highest average cyclomatic complexity",
+    }
+
+
+def top_rate_chart(files):
+    return bar_chart(files, "change_rate", "{:.2f}", "Commits per month") | {
+        "id": "top-rate",
+        "title": "Top 20 files — commits per month",
+        "aria_label": "Bar chart of the 20 files with the highest change rate",
+    }

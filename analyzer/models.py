@@ -1,6 +1,7 @@
 import re
 import uuid
 
+from django.conf import settings
 from django.db import models
 from django.urls import reverse
 from django.utils.functional import cached_property
@@ -64,7 +65,8 @@ class Analysis(models.Model):
     @cached_property
     def links(self):
         """Permalinks to files and the analysed commit on GitHub/GitLab/Bitbucket (falsy if unknown host)."""
-        return RepoLinks(self.repo_url, (self.results or {}).get("head_sha"))
+        return RepoLinks(self.repo_url, (self.results or {}).get("head_sha"),
+                         getattr(settings, "GIT_ANALYSIS_REPO_HOSTS", {}))
 
     @cached_property
     def current_files(self):

@@ -26,6 +26,7 @@ The tool started as a Jupyter notebook ([`notebooks/git_code_quality.ipynb`](not
 - [Screenshots](#screenshots)
 - [Installation](#installation)
 - [Running](#running)
+- [Use it as a Claude Code skill](#use-it-as-a-claude-code-skill)
 - [Configuration](#configuration)
 - [Project layout](#project-layout)
 - [Limitations and caveats](#limitations-and-caveats)
@@ -68,7 +69,7 @@ flowchart TD
     pairs --> strength
     risk --> results[("Analysis.results<br/>JSON in database")]
     strength --> results
-    results --> ui["Charts (matplotlib PNG)<br/>Tables (HTMX partials)<br/>CSV export"]
+    results --> ui["Charts (interactive SVG + matplotlib PNG)<br/>Tables (HTMX partials)<br/>CSV export"]
 ```
 
 ---
@@ -131,7 +132,7 @@ Screenshots were taken with the example repo: [`psf/requests`](https://github.co
 
 | |                                                   |
 |---|---------------------------------------------------|
-| **Overview:** KPIs, interactive complexity-vs-change and churn-vs-LOC scatters (hover for paths, log/linear scale), the notebook charts, summary statistics | **Files:** sortable and filterable table          |
+| **Overview:** KPIs, interactive scatters and top-20 bar charts (hover for paths, click for details, log/linear scale), the other notebook charts, summary statistics | **Files:** sortable and filterable table          |
 | ![Overview](docs/screenshots/4-overview.png) | ![Files](docs/screenshots/5-files.png)            |
 | **Hotspots:** top 30 by risk score | **Coupling:** heatmap, top pairs, coupling degree |
 | ![Hotspots](docs/screenshots/6-hotspots.png) | ![Coupling](docs/screenshots/7-coupling.png)      |
@@ -200,6 +201,28 @@ Open `notebooks/git_code_quality.ipynb` in VS Code, PyCharm or Jupyter, using th
 
 ---
 
+## Use it as a Claude Code skill
+
+The same analysis is packaged as a [Claude Code](https://claude.com/claude-code) plugin, so you can ask Claude *"what are the hotspots in this repo?"* without running the web app. In Claude Code:
+
+```
+/plugin install git-code-quality --marketplace julzhk/git-analysis
+```
+
+On older Claude Code versions, run `/plugin marketplace add julzhk/git-analysis` first, then `/plugin install git-code-quality@git-analysis`.
+
+The skill runs `plugins/git-code-quality/skills/git-code-quality/scripts/analyse.py`. It analyses the current repo or a URL, prints a Markdown summary for Claude to interpret, and writes `results.json` plus a self-contained `report.html` with the interactive charts. It needs [`uv`](https://docs.astral.sh/uv/), or `pip install radon jinja2`. You can also run the script yourself:
+
+```bash
+uv run plugins/git-code-quality/skills/git-code-quality/scripts/analyse.py https://github.com/psf/requests.git --out /tmp/requests-quality
+```
+
+See [`plugins/git-code-quality/README.md`](plugins/git-code-quality/README.md) for options. To try local changes, run `claude --plugin-dir plugins/git-code-quality`.
+
+The plugin carries copies of `analyzer/analysis.py`, `bubble.py` and `links.py`. After changing those, run `python scripts/sync_plugin.py`; a test fails while the copies are stale.
+
+---
+
 ## Configuration
 
 Settings live in `git_analysis/settings.py`:
@@ -242,8 +265,8 @@ Any other host gets no links unless it's mapped in `GIT_ANALYSIS_REPO_HOSTS`. HT
 analyzer/
   analysis.py      # core logic: git plumbing, radon metrics, coupling (no Django dependency)
   runner.py        # background threads, concurrency limit, progress updates
-  bubble.py        # geometry, log axes + label placement for the interactive SVG scatter charts
-  charts.py        # matplotlib charts rendered to PNG
+  bubble.py        # geometry, log axes + label placement for the interactive SVG charts (scatters, top-20 bars)
+  charts.py        # matplotlib charts rendered to PNG (MI histogram, rank donut, coupling heatmap)
   links.py         # file/commit permalinks for GitHub, GitLab, Bitbucket
   forms.py         # URL / branch validation
   models.py        # Analysis model (status, stage, results JSON)
@@ -255,6 +278,9 @@ templates/
   analyzer/        # pages, tabs/ and partials/ for HTMX swaps
 notebooks/
   git_code_quality.ipynb   # the original analysis
+plugins/git-code-quality/  # Claude Code plugin: skill, CLI script, HTML report template
+.claude-plugin/marketplace.json
+scripts/sync_plugin.py     # copy the shared analysis modules into the plugin
 docs/screenshots/
 ```
 
@@ -283,7 +309,8 @@ docs/screenshots/
 - **Untrusted repositories.** The app clones arbitrary URLs. Git prompts are disabled and only the `https`, `ssh` and `file` transports are allowed, but cloning very large repositories still costs disk, CPU and time. Keep SSH and local paths disabled on any shared server.
 - **Tokens are stored** in plain text in the database as part of the repository URL, even though the UI masks them.
 - **Full clones.** The whole history of the chosen branch is cloned, which is slow for very large repositories.
-- **Some charts are static images.** The *Complexity vs rate of change* and *Churn vs lines of code* charts are interactive SVG: hover a point for its path and metrics, click it for the detail panel and source link. Both default to log scales (`ln(1 + x)`, so zero still plots) with a Linear toggle. The other charts are matplotlib PNGs, so use the Files and Hotspots tables for exact values. Only 12 files per scatter get labels (highest risk, or most churn), and a label is dropped if it would overlap another.
+- **Some charts are static images.** The two scatters (*Complexity vs rate of change*, *Churn vs lines of code*) and the two *Top 20* bar charts are interactive SVG: hover a point or bar for its path and metrics, click it for the detail panel and source link. The scatters default to log scales (`ln(1 + x)`, so zero still plots) with a Linear toggle. The MI histogram, rank donut and coupling heatmap are matplotlib PNGs, so use the Files, Hotspots and Coupling tables for exact values.
+- **Labels are short names.** Charts show the file name, plus its parent directory when two files share a name (`requests/utils.py` vs `tests/utils.py`); bar labels longer than 30 characters keep their tail. Only 12 files per scatter get labels (highest risk, or most churn), and a label is dropped if it would overlap another. The full path is always in the tooltip.
 - **Source links assume the web UI path conventions** of GitHub, GitLab and Bitbucket Cloud. Bitbucket Server/Data Center, Gitea, Azure DevOps and other hosts aren't supported yet. Links to private repositories only work for viewers who have access there.
 
 ---

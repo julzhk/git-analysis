@@ -1,0 +1,12 @@
+{
+  "name": "git-code-quality",
+  "version": "0.1.0",
+  "description": "Analyse a git repository's Python code quality: complexity, maintainability, churn, hotspots and logical coupling, with an interactive HTML report.",
+  "author": {
+    "name": "J Harley"
+  },
+  "homepage": "https://github.com/julzhk/git-analysis",
+  "repository": "https://github.com/julzhk/git-analysis",
+  "license": "GPL-3.0-or-later",
+  "keywords": ["code-quality", "git", "hotspots", "complexity", "churn", "coupling", "python", "radon"]
+}

@@ -21,12 +21,10 @@
 
     <div class="grid gap-6 lg:grid-cols-2">
         <section class="rounded-lg bg-white p-4 shadow">
-            <h2 class="font-semibold text-gray-900">Top 20 files — average cyclomatic complexity</h2>
-            <img src="{% url 'chart' analysis.pk 'top_cc' %}" alt="Top 20 files by average complexity" class="mt-3 w-full" loading="lazy">
+            {% include "analyzer/partials/bar_chart.html" with chart=top_cc %}
         </section>
         <section class="rounded-lg bg-white p-4 shadow">
-            <h2 class="font-semibold text-gray-900">Top 20 files — commits per month</h2>
-            <img src="{% url 'chart' analysis.pk 'top_change_rate' %}" alt="Top 20 files by change rate" class="mt-3 w-full" loading="lazy">
+            {% include "analyzer/partials/bar_chart.html" with chart=top_rate %}
         </section>
         <section class="rounded-lg bg-white p-4 shadow">
             <h2 class="font-semibold text-gray-900">Maintainability index distribution</h2>

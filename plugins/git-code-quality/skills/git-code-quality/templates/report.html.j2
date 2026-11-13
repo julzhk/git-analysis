@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ meta.repo }} · Code quality</title>
+<style>
+  :root {
+    --bg: #f3f4f6; --card: #fff; --text: #1f2937; --muted: #6b7280; --border: #e5e7eb;
+    --accent: #4f46e5; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { margin: 0; font-size: 24px; }
+  h2 { margin: 0; font-size: 16px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .meta { color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+  .meta code { font-family: var(--mono); }
+  .card { background: var(--card); border-radius: 8px; box-shadow: 0 1px 3px rgb(0 0 0 / .08); padding: 16px; }
+  .stack > * + * { margin-top: 24px; }
+  .kpis { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin: 0; }
+  .kpis dt { font-size: 12px; text-transform: uppercase; color: var(--muted); }
+  .kpis dd { margin: 4px 0 0; font-size: 24px; font-weight: 600; }
+  .bad { color: #dc2626; }
+  .grid2 { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); }
+  .note { color: var(--muted); margin: 2px 0 0; }
+  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 12px; }
+  .toggle { display: inline-flex; border: 1px solid #d1d5db; border-radius: 6px; overflow: hidden; }
+  .toggle button { border: 0; background: #fff; color: #374151; padding: 4px 12px; font: 600 12px system-ui, sans-serif; cursor: pointer; }
+  .toggle button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+  .wrap { position: relative; margin-top: 12px; }
+  svg { width: 100%; height: auto; display: block; user-select: none; }
+  .chart-point { cursor: default; outline: none; }
+  .chart-point[data-url] { cursor: pointer; }
+  .tooltip { position: absolute; z-index: 10; max-width: 24rem; pointer-events: none; background: #111827; color: #fff;
+             border-radius: 6px; padding: 8px 12px; font-size: 12px; box-shadow: 0 4px 12px rgb(0 0 0 / .25); }
+  .tooltip .path { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; margin: 0; }
+  .tooltip .stats { color: #d1d5db; margin: 4px 0 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; list-style: none; padding: 0; margin: 8px 0 0; font-size: 12px; color: #4b5563; }
+  .legend span { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -2px; }
+  .scroll { overflow-x: auto; margin: 12px -16px -16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { background: #f9fafb; color: var(--muted); font-size: 11px; text-transform: uppercase; text-align: right; padding: 8px 12px; white-space: nowrap; }
+  td { border-top: 1px solid var(--border); padding: 6px 12px; text-align: right; white-space: nowrap; }
+  th:first-child, td:first-child, .left { text-align: left; }
+  td.file { font-family: var(--mono); white-space: normal; overflow-wrap: anywhere; min-width: 16rem; }
+  .rank { display: inline-block; min-width: 1.6em; border-radius: 4px; text-align: center; font-weight: 600; color: #1f2937; }
+  footer { color: var(--muted); font-size: 12px; margin-top: 32px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+{# ── macros ───────────────────────────────────────────────────────────────── #}
+{% macro file_cell(path) %}{% set url = file_url(path) %}{% if url %}<a href="{{ url }}" target="_blank" rel="noopener">{{ path }}</a>{% else %}{{ path }}{% endif %}{% endmacro %}
+
+{% macro point_attrs(f) %}
+class="chart-point" tabindex="0" role="{{ 'link' if file_url(f.file) else 'img' }}"
+aria-label="{{ f.file }}: {{ f.loc }} lines, avg CC {{ f.avg_cc|num }}, {{ f.change_rate }} commits per month, churn {{ f.churn }}"
+data-path="{{ f.file }}" data-cc="{{ f.avg_cc|num }}" data-max="{{ f.max_cc if f.max_cc is not none else '—' }}"
+data-rank="{{ f.cc_rank or '—' }}" data-rate="{{ f.change_rate|num }}" data-loc="{{ f.loc }}"
+data-commits="{{ f.n_commits }}" data-churn="{{ f.churn }}" data-risk="{{ f.risk_score|num }}"
+{% if file_url(f.file) %}data-url="{{ file_url(f.file) }}"{% endif %}
+{% endmacro %}
+
+{% macro tooltip() %}
+<div class="tooltip" role="tooltip" hidden>
+    <p class="path" data-field="path"></p>
+    <p class="stats">
+        avg CC <span data-field="cc"></span> · max <span data-field="max"></span> (<span data-field="rank"></span>)
+        · <span data-field="rate"></span>/mo · <span data-field="commits"></span> commits
+        · <span data-field="loc"></span> LOC · churn <span data-field="churn"></span> · risk <span data-field="risk"></span>
+    </p>
+</div>
+{% endmacro %}
+
+{% macro scatter_svg(chart) %}
+<svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.aria_label }}">
+    <g fill="#6b7280" font-size="11">
+        {% for t in chart.x_ticks %}
+        <line x1="{{ t.x }}" x2="{{ t.x }}" y1="{{ chart.plot.top }}" y2="{{ chart.plot.bottom }}" stroke="#e5e7eb"/>
+        <text x="{{ t.x }}" y="{{ chart.plot.bottom + 16 }}" text-anchor="middle">{{ t.label }}</text>
+        {% endfor %}
+        {% for t in chart.y_ticks %}
+        <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.right }}" y1="{{ t.y }}" y2="{{ t.y }}" stroke="#e5e7eb"/>
+        <text x="{{ chart.plot.left - 8 }}" y="{{ t.y }}" text-anchor="end" dominant-baseline="middle">{{ t.label }}</text>
+        {% endfor %}
+        <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.right }}" y1="{{ chart.plot.bottom }}" y2="{{ chart.plot.bottom }}" stroke="#9ca3af"/>
+        <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.left }}" y1="{{ chart.plot.top }}" y2="{{ chart.plot.bottom }}" stroke="#9ca3af"/>
+        <text x="{{ chart.plot.cx }}" y="{{ chart.height - 6 }}" text-anchor="middle" font-size="12">{{ chart.x_label }}{% if chart.x_log %} — log scale{% endif %}</text>
+        <text transform="translate(14 {{ chart.plot.cy }}) rotate(-90)" text-anchor="middle" font-size="12">{{ chart.y_label }}{% if chart.y_log %} — log{% endif %}</text>
+    </g>
+    {% for t in chart.thresholds %}
+    <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.right }}" y1="{{ t.y }}" y2="{{ t.y }}" stroke="{{ t.colour }}" stroke-dasharray="5 4" opacity="0.8"/>
+    <text x="{{ chart.plot.right }}" y="{{ t.y - 4 }}" text-anchor="end" font-size="10" fill="{{ t.colour }}">{{ chart.threshold_prefix }} {{ t.value }}</text>
+    {% endfor %}
+    {% for p in chart.points %}
+    <g {{ point_attrs(p.file) }}>
+        <circle cx="{{ p.x }}" cy="{{ p.y }}" r="{{ p.r }}" fill="{{ p.colour }}" fill-opacity="0.72" stroke="#1f2937" stroke-opacity="0.35" stroke-width="0.8"/>
+    </g>
+    {% endfor %}
+    <g font-size="11" fill="#1f2937" stroke="white" stroke-width="3" paint-order="stroke" pointer-events="none" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+        {% for p in chart.points if p.label %}
+        <text x="{{ p.label_x }}" y="{{ p.label_y }}">{{ p.label }}</text>
+        {% endfor %}
+    </g>
+</svg>
+{% endmacro %}
+
+{% macro scatter(charts) %}
+{% set first = charts.log %}
+<section class="card scale-group">
+    <div class="head">
+        <div>
+            <h2>{{ first.title }}</h2>
+            <p class="note">{{ first.description|safe }} Hover a point for its path{% if commit_url %}, click it to open the source{% endif %}.</p>
+        </div>
+        <div class="toggle" role="group" aria-label="Axis scale">
+            {% for value, label in scales %}
+            <button type="button" data-scale="{{ value }}" aria-pressed="{{ 'true' if loop.first else 'false' }}">{{ label }}</button>
+            {% endfor %}
+        </div>
+    </div>
+    <div class="wrap">
+        {% for value, _ in scales %}
+        <div data-scale-view="{{ value }}" {% if not loop.first %}hidden{% endif %}>{{ scatter_svg(charts[value]) }}</div>
+        {% endfor %}
+        {{ tooltip() }}
+    </div>
+    <ul class="legend">
+        {% for rank, colour in legend %}<li><span style="background: {{ colour }}"></span>Rank {{ rank }}</li>{% endfor %}
+    </ul>
+</section>
+{% endmacro %}
+
+{% macro bar(chart) %}
+<section class="card">
+    <h2>{{ chart.title }}</h2>
+    <p class="note">Hover a bar for the full path{% if commit_url %}, click it to open the source{% endif %}.</p>
+    <div class="wrap">
+        <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.aria_label }}">
+            <g fill="#6b7280" font-size="11">
+                {% for t in chart.x_ticks %}
+                <line x1="{{ t.x }}" x2="{{ t.x }}" y1="{{ chart.plot.top }}" y2="{{ chart.plot.bottom }}" stroke="#e5e7eb"/>
+                <text x="{{ t.x }}" y="{{ chart.plot.bottom + 16 }}" text-anchor="middle">{{ t.label }}</text>
+                {% endfor %}
+                <line x1="{{ chart.plot.left }}" x2="{{ chart.plot.left }}" y1="{{ chart.plot.top }}" y2="{{ chart.plot.bottom }}" stroke="#9ca3af"/>
+                <text x="{{ chart.plot.cx }}" y="{{ chart.height - 4 }}" text-anchor="middle" font-size="12">{{ chart.x_label }}</text>
+            </g>
+            {% for b in chart.bars %}
+            <g {{ point_attrs(b.file) }}>
+                <rect x="{{ chart.plot.left }}" y="{{ b.y }}" width="{{ b.width }}" height="{{ b.height }}" rx="2" fill="{{ b.colour }}" stroke="#1f2937" stroke-opacity="0.35" stroke-width="0.8"/>
+                <text x="{{ chart.plot.left - 6 }}" y="{{ b.cy }}" text-anchor="end" dominant-baseline="middle" font-size="11" fill="#1f2937" font-family="ui-monospace, SFMono-Regular, Menlo, monospace">{{ b.label }}</text>
+                <text x="{{ b.end + 4 }}" y="{{ b.cy }}" dominant-baseline="middle" font-size="10" fill="#6b7280">{{ b.value }}</text>
+                <rect x="0" y="{{ b.y - 3 }}" width="{{ chart.width }}" height="{{ b.height + 6 }}" fill="transparent"/>
+            </g>
+            {% endfor %}
+        </svg>
+        {{ tooltip() }}
+    </div>
+</section>
+{% endmacro %}
+
+{# ── page ─────────────────────────────────────────────────────────────────── #}
+<main class="stack">
+    <header>
+        <h1>{{ meta.repo }}</h1>
+        <p class="meta">
+            <code>{{ meta.repo_url }}</code> · {{ meta.branch }} @
+            {% if commit_url %}<a href="{{ commit_url }}" target="_blank" rel="noopener"><code>{{ (results.head_sha or '')[:10] }}</code></a>{% else %}<code>{{ (results.head_sha or '')[:10] }}</code>{% endif %}
+            · generated {{ generated }}
+        </p>
+    </header>
+
+    <dl class="kpis">
+        <div class="card"><dt>Python files</dt><dd>{{ kpis.files }}</dd></div>
+        <div class="card"><dt>Commits</dt><dd>{{ "{:,}".format(kpis.commits) }}</dd></div>
+        <div class="card"><dt>Lines of code</dt><dd>{{ "{:,}".format(kpis.loc) }}</dd></div>
+        <div class="card"><dt>Mean avg CC</dt><dd>{{ kpis.mean_cc|num }}</dd></div>
+        <div class="card"><dt>Maintainable (MI ≥ 65)</dt><dd>{% if kpis.maintainable_pct is not none %}{{ kpis.maintainable_pct|num(0) }}%{% else %}—{% endif %}</dd></div>
+        <div class="card"><dt>Rank D–F files</dt><dd class="{{ 'bad' if kpis.complex_files }}">{{ kpis.complex_files }}</dd></div>
+    </dl>
+
+    {% if not results.files %}
+    <section class="card">No Python files were found on this branch (after exclusions).</section>
+    {% else %}
+    {{ scatter(scatters[0]) }}
+
+    <div class="grid2">
+        {% for chart in bars %}{{ bar(chart) }}{% endfor %}
+    </div>
+
+    <section class="card">
+        <h2>CC rank distribution</h2>
+        <p class="note">Rank of each file's most complex function (A = simple … F = untestable).</p>
+        {% set total = kpis.files or 1 %}
+        <svg viewBox="0 0 1000 40" role="img" aria-label="Files per complexity rank" style="margin-top: 12px">
+            {% set ns = namespace(x=0) %}
+            {% for rank, count, colour in ranks %}
+            {% set w = 1000 * count / total %}
+            <rect x="{{ ns.x }}" y="0" width="{{ w }}" height="40" fill="{{ colour }}"><title>Rank {{ rank }}: {{ count }} file{{ 's' if count != 1 }}</title></rect>
+            {% if w > 60 %}<text x="{{ ns.x + w / 2 }}" y="25" text-anchor="middle" font-size="13" fill="#1f2937">{{ rank }} · {{ count }}</text>{% endif %}
+            {% set ns.x = ns.x + w %}
+            {% endfor %}
+        </svg>
+    </section>
+
+    {{ scatter(scatters[1]) }}
+
+    <section class="card">
+        <h2>Hotspots</h2>
+        <p class="note">Top {{ hotspots|length }} files by risk score = avg CC × ln(1 + commits per month).</p>
+        <div class="scroll">
+            <table>
+                <thead><tr><th>File</th><th>LOC</th><th>Avg CC</th><th>Max CC</th><th class="left">Rank</th><th>MI</th><th>Commits</th><th>Rate/mo</th><th>Churn</th><th>Coupled</th><th>Risk</th></tr></thead>
+                <tbody>
+                {% for f in hotspots %}
+                <tr>
+                    <td class="file">{{ file_cell(f.file) }}</td><td>{{ f.loc }}</td><td>{{ f.avg_cc|num }}</td><td>{{ f.max_cc }}</td>
+                    <td class="left"><span class="rank" style="background: {{ rank_colour.get(f.cc_rank, '#e5e7eb') }}">{{ f.cc_rank }}</span></td>
+                    <td>{{ f.mi|num(1) }}</td><td>{{ f.n_commits }}</td><td>{{ f.change_rate|num }}</td><td>{{ "{:,}".format(f.churn) }}</td><td>{{ f.coupling_degree }}</td><td><strong>{{ f.risk_score|num }}</strong></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Logical coupling</h2>
+        <p class="note">
+            Files that change in the same commit. Strength = co-commits ÷ commits touching either file.
+            {{ "{:,}".format(results.pair_total) }} coupled pairs in total; {{ results.skipped_commits }} commits touching more than {{ results.max_changeset }} files were ignored.
+        </p>
+        <div class="scroll">
+            <table>
+                <thead><tr><th>File A</th><th class="left">File B</th><th>Co-commits</th><th>Strength</th></tr></thead>
+                <tbody>
+                {% for p in pairs %}
+                <tr><td class="file">{{ file_cell(p.file_a) }}</td><td class="file">{{ file_cell(p.file_b) }}</td><td>{{ p.co_commits }}</td><td>{{ p.coupling_strength|num }}</td></tr>
+                {% else %}
+                <tr><td colspan="4">No files changed together.</td></tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    {% endif %}
+
+    <footer>
+        Generated by the git-code-quality Claude Code skill (GPLv3). Complexity and maintainability via radon;
+        change rate, churn and coupling from <code>git log</code>. Metrics are heuristics: read them as prompts for a closer look, not verdicts.
+    </footer>
+</main>
+
+<script>
+(() => {
+    for (const group of document.querySelectorAll(".scale-group")) {
+        const buttons = group.querySelectorAll("[data-scale]");
+        for (const button of buttons) {
+            button.addEventListener("click", () => {
+                for (const b of buttons) b.setAttribute("aria-pressed", String(b === button));
+                for (const view of group.querySelectorAll("[data-scale-view]")) view.hidden = view.dataset.scaleView !== button.dataset.scale;
+            });
+        }
+    }
+    for (const wrap of document.querySelectorAll(".wrap")) {
+        const tip = wrap.querySelector(".tooltip");
+        const show = (point) => {
+            for (const el of tip.querySelectorAll("[data-field]")) el.textContent = point.dataset[el.dataset.field];
+            const box = wrap.getBoundingClientRect(), dot = point.getBoundingClientRect();
+            tip.hidden = false;
+            const left = Math.min(dot.left - box.left + dot.width / 2 + 12, box.width - tip.offsetWidth);
+            tip.style.left = `${Math.max(0, left)}px`;
+            tip.style.top = `${Math.max(0, dot.top - box.top - tip.offsetHeight - 6)}px`;
+            point.firstElementChild.setAttribute("stroke-opacity", "1");
+        };
+        const hide = (point) => {
+            tip.hidden = true;
+            point.firstElementChild.setAttribute("stroke-opacity", "0.35");
+        };
+        const open = (point) => { if (point.dataset.url) window.open(point.dataset.url, "_blank", "noopener"); };
+        for (const point of wrap.querySelectorAll(".chart-point")) {
+            point.addEventListener("mouseenter", () => show(point));
+            point.addEventListener("focus", () => show(point));
+            point.addEventListener("mouseleave", () => hide(point));
+            point.addEventListener("blur", () => hide(point));
+            point.addEventListener("click", () => open(point));
+            point.addEventListener("keyup", (event) => { if (event.key === "Enter") open(point); });
+        }
+    }
+})();
+</script>
+</body>
+</html>

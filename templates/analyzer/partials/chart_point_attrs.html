@@ -1,0 +1,8 @@
+{# Attributes for a chart point (<g>) representing file `f`: keyboard focus, tooltip data, click → detail panel. #}
+class="chart-point cursor-pointer outline-none" tabindex="0" role="button"
+aria-label="{{ f.file }}: {{ f.loc }} lines, avg CC {{ f.avg_cc|default:'n/a' }}, {{ f.change_rate }} commits per month, churn {{ f.churn }}"
+data-path="{{ f.file }}" data-cc="{{ f.avg_cc|floatformat:2|default:'—' }}" data-max="{{ f.max_cc|default_if_none:'—' }}"
+data-rank="{{ f.cc_rank|default:'—' }}" data-rate="{{ f.change_rate|floatformat:2 }}" data-loc="{{ f.loc }}"
+data-commits="{{ f.n_commits }}" data-churn="{{ f.churn }}" data-risk="{{ f.risk_score|floatformat:2|default:'—' }}"
+hx-get="{% url 'file_detail' analysis.pk %}?path={{ f.file|urlencode }}" hx-target="#file-panel"
+hx-trigger="click, keyup[key=='Enter']"

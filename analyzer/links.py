@@ -2,8 +2,6 @@
 import re
 from urllib.parse import quote, urlsplit
 
-from django.conf import settings
-
 # {base} = https://host/org/repo, {sha} = commit, {path} = url-quoted file path
 URL_PATTERNS = {
     "github": {"file": "{base}/blob/{sha}/{path}", "commit": "{base}/commit/{sha}"},
@@ -28,10 +26,10 @@ def _host_and_path(repo_url: str) -> tuple[str, str] | None:
     return (host.lower(), path) if host and path else None
 
 
-def host_kind(host: str) -> str | None:
-    custom = getattr(settings, "GIT_ANALYSIS_REPO_HOSTS", {})
-    if host in custom:
-        return custom[host]
+def host_kind(host: str, custom_hosts: dict | None = None) -> str | None:
+    """'github'/'gitlab'/'bitbucket' for a host; `custom_hosts` maps self-hosted servers, e.g. {"git.corp": "gitlab"}."""
+    if custom_hosts and host in custom_hosts:
+        return custom_hosts[host]
     for kind in ("github", "gitlab", "bitbucket"):
         if kind in host:
             return kind
@@ -39,12 +37,12 @@ def host_kind(host: str) -> str | None:
 
 
 class RepoLinks:
-    def __init__(self, repo_url: str, sha: str | None):
+    def __init__(self, repo_url: str, sha: str | None, custom_hosts: dict | None = None):
         self.base = self.kind = None
         self.sha = sha
         if sha and (parsed := _host_and_path(repo_url)):
             host, path = parsed
-            self.kind = host_kind(host)
+            self.kind = host_kind(host, custom_hosts)
             if self.kind in URL_PATTERNS:
                 self.base = f"https://{host}/{path}"
 
